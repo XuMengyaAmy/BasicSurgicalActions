@@ -119,24 +119,119 @@ function setupVideoCarouselAutoplay() {
     });
 }
 
+function setupMosaicVideoWall() {
+    const mosaicContainer = document.querySelector('.video-mosaic');
+    if (!mosaicContainer) return;
+
+    const fallbackSources = [
+        'static/videos/carousel1.mp4',
+        'static/videos/carousel2.mp4',
+        'static/videos/carousel3.mp4',
+        'static/videos/banner_video.mp4'
+    ];
+
+    function switchToFallback(video, index) {
+        if (video.dataset.fallbackApplied === '1') return;
+
+        const source = video.querySelector('source');
+        if (!source) return;
+
+        const fallbackSrc = fallbackSources[index % fallbackSources.length];
+        source.src = fallbackSrc;
+        video.dataset.fallbackApplied = '1';
+        video.load();
+        video.play().catch(() => {
+            // If fallback also fails, browser support is likely very limited.
+        });
+    }
+
+    const targetCellCount = 60; // 10 rows x 6 columns
+    const seedVideos = Array.from(mosaicContainer.querySelectorAll('.mosaic-video'));
+
+    if (seedVideos.length === 0) return;
+
+    while (mosaicContainer.querySelectorAll('.mosaic-video').length < targetCellCount) {
+        const currentCount = mosaicContainer.querySelectorAll('.mosaic-video').length;
+        const template = seedVideos[currentCount % seedVideos.length];
+        const clone = template.cloneNode(true);
+        mosaicContainer.appendChild(clone);
+    }
+
+    const mosaicVideos = mosaicContainer.querySelectorAll('.mosaic-video');
+
+    mosaicVideos.forEach((video, index) => {
+        // Ensure autoplay policy requirements are met consistently across browsers.
+        video.muted = true;
+        video.defaultMuted = true;
+        video.autoplay = true;
+        video.loop = true;
+        video.playsInline = true;
+
+        video.playbackRate = 0.9 + (index % 4) * 0.05;
+
+        video.addEventListener('loadedmetadata', function() {
+            if (video.duration && Number.isFinite(video.duration)) {
+                video.currentTime = (video.duration * ((index * 17) % 100)) / 100;
+            }
+
+            video.play().catch(() => {
+                switchToFallback(video, index);
+            });
+        });
+
+        video.addEventListener('error', function() {
+            console.warn('Video failed to decode/play:', video.currentSrc || video.src);
+            switchToFallback(video, index);
+        });
+
+        video.play().catch(() => {
+            switchToFallback(video, index);
+        });
+
+        // Detect stalls that often appear as persistent black frames.
+        setTimeout(function() {
+            if (video.readyState < 2 || video.currentTime === 0) {
+                switchToFallback(video, index);
+            }
+        }, 2500);
+    });
+}
+
 $(document).ready(function() {
     // Check for click events on the navbar burger icon
 
-    var options = {
-		slidesToScroll: 1,
-		slidesToShow: 1,
-		loop: true,
-		infinite: true,
-		autoplay: true,
-		autoplaySpeed: 5000,
+    var datasetCarouselOptions = {
+        slidesToScroll: 1,
+        slidesToShow: 1,
+        loop: true,
+        infinite: true,
+        autoplay: false,
+        navigation: true,
+        pagination: true,
     }
 
-	// Initialize all div with carousel class
-    var carousels = bulmaCarousel.attach('.carousel', options);
+    var videoCarouselOptions = {
+        slidesToScroll: 1,
+        slidesToShow: 1,
+        loop: true,
+        infinite: true,
+        autoplay: true,
+        autoplaySpeed: 5000,
+        navigation: true,
+        pagination: true,
+    }
+
+    // Initialize carousels separately to avoid conflicting interaction behavior.
+    bulmaCarousel.attach('#dataset-carousel', datasetCarouselOptions);
+    bulmaCarousel.attach('#generalized-bsa-carousel', datasetCarouselOptions);
+    bulmaCarousel.attach('#downstream-applications-carousel', datasetCarouselOptions);
 	
     bulmaSlider.attach();
     
     // Setup video autoplay for carousel
     setupVideoCarouselAutoplay();
+
+    // Setup mosaic video wall playback behavior
+    setupMosaicVideoWall();
 
 })
